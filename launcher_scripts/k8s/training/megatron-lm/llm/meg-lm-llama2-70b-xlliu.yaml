@@ -22,8 +22,6 @@ spec:
           containers:
           - args:
             - "export NODE_RANK=$RANK && unset RANK && rm -rf /dev/shm/* && \
-               export SIFLOW_LOG_LEVEL=error && export SIFILE_FS_READ_TYPE=syncio && \
-               pip install /data/zawang/siflowai/siflowai-0.1.0-cp312-cp312-linux_x86_64.whl && \
                DEEP_LEARNING_EXAMPLES_DIR=/workspace/deep_learning_examples \
                BASE_RESULTS_DIR=/workspace/deep_learning_examples/results \
                RUN_ID=0 GBS=128 MBS=1 PP=4 TP=4 MAX_STEPS=40 \
