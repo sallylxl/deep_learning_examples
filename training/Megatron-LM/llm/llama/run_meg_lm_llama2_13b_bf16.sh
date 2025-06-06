@@ -107,6 +107,7 @@ MODEL_ARGS=(
     --swiglu
     --normalization RMSNorm 
     --disable-bias-linear
+    --async-save
 )
 
 TRAINING_ARGS=(
