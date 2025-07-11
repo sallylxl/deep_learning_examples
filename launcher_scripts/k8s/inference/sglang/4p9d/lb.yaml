@@ -1,0 +1,68 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: deepseekr10528-lb-main
+  namespace: t-hisys-xlliu
+  labels:
+    app: deepseekr10528-lb
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: deepseekr10528-lb
+  template:
+    metadata:
+      labels:
+        app: deepseekr10528-lb
+    spec:
+      # nodeSelector:
+      #     bo: "yes"
+      # tolerations:
+      #   - key: bopd
+      #     operator: Exists
+      #   - key: node-role
+      #     operator: Exists
+      containers:
+        - name: sgl-minilb
+          image: registry-cn-shanghai.siflow.cn/hisys/sglang:latest
+          command:
+          - python
+          - -m
+          - sglang.srt.disaggregation.mini_lb
+          - --prefill
+          - http://deepseekr10528-prefill-svc:30000
+          - --decode
+          - http://deepseekr10528-decode-svc:30000
+          - --host
+          - 0.0.0.0
+          - --port
+          -  "8000"
+          ports:
+            - containerPort: 8000
+          volumeMounts:
+          - mountPath: /dev/shm
+            name: dshm
+          - mountPath: /mnt/xstorage/model
+            name: model
+      volumes:
+      - emptyDir:
+          medium: Memory
+        name: dshm
+      - hostPath:
+          path: /mnt/xstorage/model
+        name: model
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: deepseekr10528-lb-svc
+  namespace: t-hisys-xlliu
+spec:
+  type: ClusterIP # NodePort is easy to test, you can also specify `ClusterIP`
+  selector:
+    app: deepseekr10528-lb
+  ports:
+    - protocol: TCP
+      port: 8000         # Service Port（In-Cluster）
+      targetPort: 8000   # Exposed Container
+      # nodePort: 30800
