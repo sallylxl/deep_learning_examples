@@ -1,0 +1,197 @@
+apiVersion: leaderworkerset.x-k8s.io/v1
+kind: LeaderWorkerSet
+metadata:
+  name: alan-deepseek-decode
+  namespace: llm
+spec:
+  leaderWorkerTemplate:
+    size: 2
+    leaderTemplate:
+      metadata:
+        annotations:
+          roce/gid-injection: '{"envName": "NCCL_IB_GID_INDEX"}'
+        labels:
+          role: decode-leader
+      spec:
+        hostNetwork: true
+        hostIPC: true
+        dnsPolicy: ClusterFirstWithHostNet
+        nodeSelector:
+          deepseek-pool: "true"
+        containers:
+        - name: sglang-leader
+          image: sealos.hub:5000/sglang:v0.5.1.post1-cu126
+          securityContext:
+            privileged: true
+          command: ["/usr/bin/env","bash","-c"]
+          args:
+          - |-
+            echo "LWS_LEADER_ADDRESS=$LWS_LEADER_ADDRESS"
+            echo "LWS_GROUP_SIZE=$LWS_GROUP_SIZE"
+            echo "LWS_WORKER_INDEX=$LWS_WORKER_INDEX"
+            exec python3 -m sglang.launch_server --port "30000" --host "0.0.0.0" \
+              --model-path /data/DeepSeek-V3-0324 \
+              --chunked-prefill-size "262144" --page-size "64" \
+              --enable-dp-attention --enable-dp-lm-head --dp-size "2" \
+              --enable-deepep-moe --deepep-mode low_latency --disaggregation-mode decode \
+              --mem-fraction-static "0.849" --context-length "32768" \
+              --disaggregation-ib-device "mlx5_0,mlx5_1,mlx5_2,mlx5_3" \
+              --cuda-graph-max-bs "64" --max-running-requests "2048" \
+              --tp-size "8" --dist-init-addr ${LWS_LEADER_ADDRESS}.svc.cluster.local:20102 \
+              --nnodes 2 --node-rank 0 \
+              --trust-remote-code  \
+              --disaggregation-transfer-backend nixl
+          env:
+          - name: SGLANG_HOST_IP
+            valueFrom: {fieldRef: {fieldPath: status.hostIP}}
+          - name: HOST_IP
+            valueFrom: {fieldRef: {fieldPath: status.hostIP}}
+          - name: GLOO_SOCKET_IFNAME
+            value: eth0
+          - name: NCCL_SOCKET_IFNAME
+            value: eth0
+          - name: NCCL_IB_GID_INDEX
+            value: "3"
+          - name: NVSHMEM_IB_GID_INDEX
+            value: "3"
+          - name: NVSHMEM_ENABLE_NIC_PE_MAPPING
+            value: "1"
+          - name: NVSHMEM_HCA_PE_MAPPING
+            value: "mlx5_0:1:2,mlx5_1:1:2,mlx5_2:1:2,mlx5_3:1:2"
+          - name: NCCL_IB_QPS_PER_CONNECTION
+            value: "8"
+          - name: NCCL_IB_SPLIT_DATA_ON_QPS
+            value: "1"
+          - name: CUDA_LAUNCH_BLOCKING
+            value: "0"
+          - name: NCCL_NET_PLUGIN
+            value: "none"
+          - name: NCCL_MIN_NCHANNELS
+            value: "4"
+          - name: MC_TE_METRIC
+            value: "true"
+          - name: SGLANG_MOONCAKE_TRANS_THREAD
+            value: "16"
+          - name: SGL_ENABLE_JIT_DEEPGEMM
+            value: "1"
+          ports:
+          - containerPort: 30000
+            protocol: TCP
+          readinessProbe:
+            initialDelaySeconds: 300
+            timeoutSeconds: 300
+            periodSeconds: 300
+            tcpSocket:
+              port: 30000
+          resources:
+            limits:
+              nvidia.com/gpu: "8"
+          volumeMounts:
+          - mountPath: /dev/shm
+            name: dshm
+          - mountPath: /data
+            name: model
+        volumes:
+        - name: dshm
+          emptyDir: { medium: Memory }
+        - name: model
+          hostPath: { path: /data }
+
+    workerTemplate:
+      metadata:
+        annotations:
+          roce/gid-injection: '{"envName": "NCCL_IB_GID_INDEX"}'
+        labels:
+          role: decode-worker
+      spec:
+        hostNetwork: true
+        hostIPC: true
+        dnsPolicy: ClusterFirstWithHostNet
+        nodeSelector:
+          deepseek-pool: "true"
+        containers:
+        - name: sglang-worker
+          image: sealos.hub:5000/sglang:v0.5.1.post1-cu126
+          securityContext:
+            privileged: true
+          command: ["/usr/bin/env","bash","-c"]
+          args:
+          - |-
+            echo "LWS_LEADER_ADDRESS=$LWS_LEADER_ADDRESS"
+            echo "LWS_GROUP_SIZE=$LWS_GROUP_SIZE"
+            echo "LWS_WORKER_INDEX=$LWS_WORKER_INDEX"
+            exec python3 -m sglang.launch_server --port "30000" --host "0.0.0.0" \
+              --model-path /data/DeepSeek-V3-0324 \
+              --chunked-prefill-size "262144" --page-size "64" \
+              --enable-dp-attention --enable-dp-lm-head --dp-size "2" \
+              --enable-deepep-moe --deepep-mode low_latency --disaggregation-mode decode \
+              --mem-fraction-static "0.849" --context-length "32768" \
+              --disaggregation-ib-device "mlx5_0,mlx5_1,mlx5_2,mlx5_3" \
+              --cuda-graph-max-bs "64" --max-running-requests "2048" \
+              --tp-size "8" --dist-init-addr ${LWS_LEADER_ADDRESS}.svc.cluster.local:20102 \
+              --nnodes ${LWS_GROUP_SIZE} --node-rank ${LWS_WORKER_INDEX} \
+              --trust-remote-code \
+              --disaggregation-transfer-backend nixl
+          env:
+          - name: SGLANG_HOST_IP
+            valueFrom: {fieldRef: {fieldPath: status.hostIP}}
+          - name: HOST_IP
+            valueFrom: {fieldRef: {fieldPath: status.hostIP}}
+          - name: GLOO_SOCKET_IFNAME
+            value: eth0
+          - name: NCCL_SOCKET_IFNAME
+            value: eth0
+          - name: NVSHMEM_IB_TRAFFIC_CLASS
+            value: "16"
+          - name: NVSHMEM_IB_GID_INDEX
+            value: "3"
+          - name: NCCL_IB_GID_INDEX
+            value: "3"
+          - name: NVSHMEM_ENABLE_NIC_PE_MAPPING
+            value: "1"
+          - name: NVSHMEM_HCA_PE_MAPPING
+            value: "mlx5_0:1:2,mlx5_1:1:2,mlx5_2:1:2,mlx5_3:1:2"
+          - name: NCCL_IB_QPS_PER_CONNECTION
+            value: "8"
+          - name: NCCL_IB_SPLIT_DATA_ON_QPS
+            value: "1"
+          - name: NCCL_NET_PLUGIN
+            value: "none"
+          - name: NCCL_MIN_NCHANNELS
+            value: "4"
+          - name: MC_TE_METRIC
+            value: "true"
+          - name: SGLANG_MOONCAKE_TRANS_THREAD
+            value: "16"
+          - name: SGL_ENABLE_JIT_DEEPGEMM
+            value: "1"
+          ports:
+          - containerPort: 30000
+            protocol: TCP
+          readinessProbe:
+            initialDelaySeconds: 300
+            timeoutSeconds: 300
+            periodSeconds: 300
+            tcpSocket:
+              port: 30000
+          resources:
+            limits:
+              nvidia.com/gpu: "8"
+          volumeMounts:
+          - mountPath: /dev/shm
+            name: dshm
+          - mountPath: /data
+            name: model
+        volumes:
+        - name: dshm
+          emptyDir: { medium: Memory }
+        - name: model
+          hostPath: { path: /data }
+
+  replicas: 1
+  rolloutStrategy:
+    type: RollingUpdate
+    rollingUpdateConfiguration:
+      maxSurge: 0
+      maxUnavailable: 1
+  startupPolicy: LeaderCreated
