@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alan-deepseek-lb
+  namespace: llm
+  labels: {app: alan-deepseek}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: alan-deepseek, tier: lb}
+  template:
+    metadata:
+      labels: {app: alan-deepseek, tier: lb}
+    spec:
+      containers:
+      - name: sgl-minilb
+        image: sealos.hub:5000/sglang:v0.5.1.post1-cu126
+        command: ["python","-m","sglang.srt.disaggregation.mini_lb",
+                  "--prefill","http://alan-deepseek-prefill-svc:30000",
+                  "--decode","http://alan-deepseek-decode-svc:30000",
+                  "--host","0.0.0.0","--port","8000"]
+        ports:
+        - containerPort: 8000
+        readinessProbe:
+          tcpSocket: {port: 8000}
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+        volumeMounts:
+        - name: model
+          mountPath: /data
+      volumes:
+      - name: model
+        hostPath: {path: /data}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: alan-deepseek-svc
+  namespace: llm
+spec:
+  type: ClusterIP
+  selector:
+    app: alan-deepseek
+    tier: lb
+  ports:
+    - name: http
+      protocol: TCP
+      port: 8000
+      targetPort: 8000
