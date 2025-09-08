@@ -1,0 +1,99 @@
+apiVersion: leaderworkerset.x-k8s.io/v1
+kind: LeaderWorkerSet
+metadata:
+  name: alan-deepseek-prefill
+  namespace: llm
+spec:
+  leaderWorkerTemplate:
+    size: 1
+    leaderTemplate:
+      metadata:
+        labels:
+          app: alan-deepseek
+          role: prefill-leader
+          leaderworkerset.sigs.k8s.io/role: leader
+      spec:
+        dnsPolicy: ClusterFirst
+        containers:
+        - name: sglang-leader
+          image: sealos.hub:5000/sglang:v0.5.1.post1-cu126
+          command: ["/usr/bin/env","bash","-c"]
+          args:
+          - |
+            set -euxo pipefail
+            export POD_IP="$(hostname -i)"
+            echo "PREFILL leader on ${POD_IP}:30000"
+            exec python3 -m sglang.launch_server \
+              --port 30000 \
+              --host "0.0.0.0" \
+              --model-path /data/DeepSeek-V3-0324 \
+              --disaggregation-ib-device mlx5_0,mlx5_1,mlx5_2,mlx5_3 \
+              --chunked-prefill-size 524288 \
+              --max-prefill-tokens 32768 \
+              --page-size 64 \
+              --disable-radix-cache \
+              --enable-deepep-moe --deepep-mode normal \
+              --disaggregation-mode prefill \
+              --mem-fraction-static 0.85 --context-length 32768 \
+              --tp 8 \
+              --dist-init-addr ${LWS_LEADER_ADDRESS}.svc.cluster.local:20102 \
+              --nnodes ${LWS_GROUP_SIZE} --node-rank ${LWS_WORKER_INDEX} \
+              --trust-remote-code --max-running-requests 1024 \
+              --disaggregation-transfer-backend nixl
+          env:
+          # 保留这些网络/通信相关 env；LWS_* 由控制器自动注入，无需自己用 fieldRef 再注入
+          - name: GLOO_SOCKET_IFNAME
+            value: eth0
+          - name: NCCL_SOCKET_IFNAME
+            value: eth0
+          - name: NCCL_IB_GID_INDEX
+            value: "3"
+          - name: NCCL_IB_QPS_PER_CONNECTION
+            value: "8"
+          - name: NCCL_IB_SPLIT_DATA_ON_QPS
+            value: "1"
+          - name: NCCL_NET_PLUGIN
+            value: none
+          - name: NCCL_MIN_NCHANNELS
+            value: "4"
+          - name: SGLANG_SET_CPU_AFFINITY
+            value: "true"
+          - name: SGL_ENABLE_JIT_DEEPGEMM
+            value: "1"
+          - name: NVSHMEM_ENABLE_NIC_PE_MAPPING
+            value: "1"
+          - name: NVSHMEM_IB_GID_INDEX
+            value: "3"
+          - name: NVSHMEM_HCA_PE_MAPPING
+            value: "mlx5_0:1:2,mlx5_1:1:2,mlx5_2:1:2,mlx5_3:1:2"
+          ports:
+          - containerPort: 30000
+          - containerPort: 8998   # NIXL bootstrap
+          readinessProbe:
+            tcpSocket: { port: 30000 }
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+          resources:
+            limits:
+              nvidia.com/gpu: "8"
+          volumeMounts:
+          - { name: dshm,  mountPath: /dev/shm }
+          - { name: model, mountPath: /data }
+        volumes:
+        - name: dshm
+          emptyDir: { medium: Memory }
+        - name: model
+          hostPath: { path: /data }
+    # 1P 不会创建 worker；如不需要可整段删除
+    workerTemplate:
+      metadata:
+        labels:
+          app: alan-deepseek
+          role: prefill-worker
+          leaderworkerset.sigs.k8s.io/role: worker
+      spec:
+        containers:
+        - name: noop
+          image: busybox
+          command: ["sh","-c","sleep 3600000"]
