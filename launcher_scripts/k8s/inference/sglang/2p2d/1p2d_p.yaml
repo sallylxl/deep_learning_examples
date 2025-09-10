@@ -13,9 +13,11 @@ spec:
           role: prefill-leader
           leaderworkerset.sigs.k8s.io/role: leader
       spec:
+        hostNetwork: true
+        hostIPC: true
+        dnsPolicy: ClusterFirstWithHostNet
         nodeSelector:
           "siflow.scitix.ai/resource-pool-name": hisys-inference
-        dnsPolicy: ClusterFirst
         containers:
         - name: sglang-leader
           image: lmsysorg/sglang:v0.5.1.post2-cu126
@@ -41,11 +43,14 @@ spec:
               --trust-remote-code --max-running-requests 1024 \
               --disaggregation-transfer-backend nixl
           env:
-          # 这些参数可以花时间看看哪些是可以去掉的，一直没太搞明白cc瑞哥
+          - name: SGLANG_HOST_IP
+            valueFrom: {fieldRef: {fieldPath: status.hostIP}}
+          - name: HOST_IP
+            valueFrom: {fieldRef: {fieldPath: status.hostIP}}
           - name: GLOO_SOCKET_IFNAME
-            value: eth0
+            value: bond0
           - name: NCCL_SOCKET_IFNAME
-            value: eth0
+            value: bond0
           - name: NCCL_IB_GID_INDEX
             value: "3"
           - name: NCCL_IB_QPS_PER_CONNECTION
@@ -78,7 +83,6 @@ spec:
         - name: model
           persistentVolumeClaim:
             claimName: siflow-models
-    # 1P 不会创建 worker；如不需要可整段删除，如果多个p需要，因此保留
     workerTemplate:
       metadata:
         labels:
@@ -92,3 +96,4 @@ spec:
         - name: noop
           image: busybox
           command: ["sh","-c","sleep 3600000"]
+
