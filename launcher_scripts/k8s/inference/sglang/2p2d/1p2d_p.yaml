@@ -78,7 +78,7 @@ spec:
         - name: model
           persistentVolumeClaim:
             claimName: siflow-models
-    # 1P 不会创建 worker；如不需要可整段删除
+    # 1P 不会创建 worker；如不需要可整段删除，如果多个p需要，因此保留
     workerTemplate:
       metadata:
         labels:
