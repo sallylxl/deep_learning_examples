@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: deepseek-lb
+  namespace: default
+  labels: {app: deepseek, tier: lb}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: deepseek, tier: lb}
+  template:
+    metadata:
+      labels: {app: deepseek, tier: lb}
+    spec:
+      hostNetwork: true
+      hostIPC: true
+      dnsPolicy: ClusterFirstWithHostNet
+      nodeSelector:
+        "roce.scitix.ai/unit": unit1
+      containers:
+      - name: sglang-minilb
+        image: registry-cn-shanghai.siflow.cn/hisys/sglang:v0.5.1.post2-cu126
+        command: ["/usr/bin/env", "bash", "-c"]
+        args:
+          - |
+            exec python -m sglang.srt.disaggregation.mini_lb \
+              --prefill "http://deepseek-prefill-svc:30000" \
+              --decode "http://deepseek-decode-svc:30000" \
+              --host "0.0.0.0" \
+              --port 8000
+        ports:
+        - containerPort: 8000
+          name: http
+        readinessProbe:
+          tcpSocket: {port: 8000}
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+        volumeMounts:
+        - name: mnt
+          mountPath: /mnt
+      volumes:
+      - name: mnt
+        hostPath:
+          path: /mnt/xstorage
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: deepseek-svc
+  namespace: default
+spec:
+  type: ClusterIP
+  selector:
+    app: deepseek
+    tier: lb
+  ports:
+    - name: http
+      protocol: TCP
+      port: 8000
+      targetPort: 8000
