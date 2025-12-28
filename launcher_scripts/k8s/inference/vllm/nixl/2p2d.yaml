@@ -1,0 +1,381 @@
+# vllm-2p2d-all.yaml
+
+---
+# Prefill A
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm-prefill-a
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vllm-prefill-a
+  template:
+    metadata:
+      labels:
+        app: vllm-prefill-a
+        scitix.ai/topo-aware-in-node: "true"
+      annotations:
+        sidecar.istio.io/inject: "false"
+        k8s.v1.cni.cncf.io/networks: kube-system/rdma0,kube-system/rdma1,kube-system/rdma2,kube-system/rdma3,kube-system/rdma4,kube-system/rdma5,kube-system/rdma6,kube-system/rdma7
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: In
+                    values: [gpu-node-017, gpu-node-018, gpu-node-022, gpu-node-023, gpu-node-024]
+      containers:
+        - name: prefill-a
+          image: registry-cn-shanghai.siflow.cn/hisys/pytorch:25.04-vllm
+          command: ["/usr/bin/env", "bash", "-c"]
+          args:
+            - |
+              export VLLM_IS_PREFILL=1
+              export VLLM_NIXL_SIDE_CHANNEL_PORT=5557
+              export NCCL_DEBUG=INFO
+              CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 \
+              vllm serve /data/model/deepseek-ai/DeepSeek-R1-0528/ \
+                --port 8100 \
+                --tensor-parallel-size 8 \
+                --enforce-eager \
+                --disable-log-requests \
+                --block-size 128 \
+                --kv-transfer-config '{"kv_connector":"NixlConnector","kv_role":"kv_both"}' &
+              sleep inf
+          resources:
+            limits:
+              cpu: "80"
+              memory: 1000Gi
+              nvidia.com/gpu: "8"
+              nvidia.com/rdma0: "1"
+              nvidia.com/rdma1: "1"
+              nvidia.com/rdma2: "1"
+              nvidia.com/rdma3: "1"
+              nvidia.com/rdma4: "1"
+              nvidia.com/rdma5: "1"
+              nvidia.com/rdma6: "1"
+              nvidia.com/rdma7: "1"
+            requests:
+              cpu: "80"
+              memory: 1000Gi
+              nvidia.com/gpu: "8"
+              nvidia.com/rdma0: "1"
+              nvidia.com/rdma1: "1"
+              nvidia.com/rdma2: "1"
+              nvidia.com/rdma3: "1"
+              nvidia.com/rdma4: "1"
+              nvidia.com/rdma5: "1"
+              nvidia.com/rdma6: "1"
+              nvidia.com/rdma7: "1"
+          volumeMounts:
+            - name: everything
+              mountPath: /data
+            - name: shm
+              mountPath: /dev/shm
+      volumes:
+        - name: everything
+          hostPath:
+            path: /mnt/xstorage
+        - name: shm
+          hostPath:
+            path: /dev/shm
+
+---
+# Prefill B
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm-prefill-b
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vllm-prefill-b
+  template:
+    metadata:
+      labels:
+        app: vllm-prefill-b
+        scitix.ai/topo-aware-in-node: "true"
+      annotations:
+        sidecar.istio.io/inject: "false"
+        k8s.v1.cni.cncf.io/networks: kube-system/rdma0,kube-system/rdma1,kube-system/rdma2,kube-system/rdma3,kube-system/rdma4,kube-system/rdma5,kube-system/rdma6,kube-system/rdma7
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: In
+                    values: [gpu-node-017, gpu-node-018, gpu-node-022, gpu-node-023, gpu-node-024]
+      containers:
+        - name: prefill-b
+          image: registry-cn-shanghai.siflow.cn/hisys/pytorch:25.04-vllm
+          command: ["/usr/bin/env", "bash", "-c"]
+          args:
+            - |
+              export VLLM_IS_PREFILL=1
+              export VLLM_NIXL_SIDE_CHANNEL_PORT=5558
+              CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 \
+              vllm serve /data/model/deepseek-ai/DeepSeek-R1-0528/ \
+                --port 8101 \
+                --tensor-parallel-size 8 \
+                --enforce-eager \
+                --disable-log-requests \
+                --block-size 128 \
+                --kv-transfer-config '{"kv_connector":"NixlConnector","kv_role":"kv_both"}' &
+              sleep inf
+          resources:
+            limits:
+              cpu: "80"
+              memory: 1000Gi
+              nvidia.com/gpu: "8"
+              nvidia.com/rdma0: "1"
+              nvidia.com/rdma1: "1"
+              nvidia.com/rdma2: "1"
+              nvidia.com/rdma3: "1"
+              nvidia.com/rdma4: "1"
+              nvidia.com/rdma5: "1"
+              nvidia.com/rdma6: "1"
+              nvidia.com/rdma7: "1"
+            requests:
+              cpu: "80"
+              memory: 1000Gi
+              nvidia.com/gpu: "8"
+              nvidia.com/rdma0: "1"
+              nvidia.com/rdma1: "1"
+              nvidia.com/rdma2: "1"
+              nvidia.com/rdma3: "1"
+              nvidia.com/rdma4: "1"
+              nvidia.com/rdma5: "1"
+              nvidia.com/rdma6: "1"
+              nvidia.com/rdma7: "1"
+          volumeMounts:
+            - name: everything
+              mountPath: /data
+            - name: shm
+              mountPath: /dev/shm
+      volumes:
+        - name: everything
+          hostPath:
+            path: /mnt/xstorage
+        - name: shm
+          hostPath:
+            path: /dev/shm
+
+---
+# Decode A
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm-decode-a
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vllm-decode-a
+  template:
+    metadata:
+      labels:
+        app: vllm-decode-a
+        scitix.ai/topo-aware-in-node: "true"
+      annotations:
+        sidecar.istio.io/inject: "false"
+        k8s.v1.cni.cncf.io/networks: kube-system/rdma0,kube-system/rdma1,kube-system/rdma2,kube-system/rdma3,kube-system/rdma4,kube-system/rdma5,kube-system/rdma6,kube-system/rdma7
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: In
+                    values: [gpu-node-017, gpu-node-018, gpu-node-022, gpu-node-023, gpu-node-024]
+      containers:
+        - name: decode-a
+          image: registry-cn-shanghai.siflow.cn/hisys/pytorch:25.04-vllm
+          command: ["/usr/bin/env", "bash", "-c"]
+          args:
+            - |
+              export VLLM_IS_PREFILL=0
+              export VLLM_NIXL_SIDE_CHANNEL_PORT=5559
+              CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 \
+              vllm serve /data/model/deepseek-ai/DeepSeek-R1-0528/ \
+                --port 8200 \
+                --tensor-parallel-size 8 \
+                --enforce-eager \
+                --disable-log-requests \
+                --block-size 128 \
+                --kv-transfer-config '{"kv_connector":"NixlConnector","kv_role":"kv_both"}' &
+              sleep inf
+          resources:
+            limits:
+              cpu: "80"
+              memory: 1000Gi
+              nvidia.com/gpu: "8"
+              nvidia.com/rdma0: "1"
+              nvidia.com/rdma1: "1"
+              nvidia.com/rdma2: "1"
+              nvidia.com/rdma3: "1"
+              nvidia.com/rdma4: "1"
+              nvidia.com/rdma5: "1"
+              nvidia.com/rdma6: "1"
+              nvidia.com/rdma7: "1"
+            requests:
+              cpu: "80"
+              memory: 1000Gi
+              nvidia.com/gpu: "8"
+              nvidia.com/rdma0: "1"
+              nvidia.com/rdma1: "1"
+              nvidia.com/rdma2: "1"
+              nvidia.com/rdma3: "1"
+              nvidia.com/rdma4: "1"
+              nvidia.com/rdma5: "1"
+              nvidia.com/rdma6: "1"
+              nvidia.com/rdma7: "1"
+          volumeMounts:
+            - name: everything
+              mountPath: /data
+            - name: shm
+              mountPath: /dev/shm
+      volumes:
+        - name: everything
+          hostPath:
+            path: /mnt/xstorage
+        - name: shm
+          hostPath:
+            path: /dev/shm
+
+---
+# Decode B
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm-decode-b
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vllm-decode-b
+  template:
+    metadata:
+      labels:
+        app: vllm-decode-b
+        scitix.ai/topo-aware-in-node: "true"
+      annotations:
+        sidecar.istio.io/inject: "false"
+        k8s.v1.cni.cncf.io/networks: kube-system/rdma0,kube-system/rdma1,kube-system/rdma2,kube-system/rdma3,kube-system/rdma4,kube-system/rdma5,kube-system/rdma6,kube-system/rdma7
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: In
+                    values: [gpu-node-017, gpu-node-018, gpu-node-022, gpu-node-023, gpu-node-024]
+      containers:
+        - name: decode-b
+          image: registry-cn-shanghai.siflow.cn/hisys/pytorch:25.04-vllm
+          command: ["/usr/bin/env", "bash", "-c"]
+          args:
+            - |
+              export VLLM_IS_PREFILL=0
+              export VLLM_NIXL_SIDE_CHANNEL_PORT=5560
+              CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 \
+              vllm serve /data/model/deepseek-ai/DeepSeek-R1-0528/ \
+                --port 8201 \
+                --tensor-parallel-size 8 \
+                --enforce-eager \
+                --disable-log-requests \
+                --block-size 128 \
+                --kv-transfer-config '{"kv_connector":"NixlConnector","kv_role":"kv_both"}' &
+              sleep inf
+          resources:
+            limits:
+              cpu: "80"
+              memory: 1000Gi
+              nvidia.com/gpu: "8"
+              nvidia.com/rdma0: "1"
+              nvidia.com/rdma1: "1"
+              nvidia.com/rdma2: "1"
+              nvidia.com/rdma3: "1"
+              nvidia.com/rdma4: "1"
+              nvidia.com/rdma5: "1"
+              nvidia.com/rdma6: "1"
+              nvidia.com/rdma7: "1"
+            requests:
+              cpu: "80"
+              memory: 1000Gi
+              nvidia.com/gpu: "8"
+              nvidia.com/rdma0: "1"
+              nvidia.com/rdma1: "1"
+              nvidia.com/rdma2: "1"
+              nvidia.com/rdma3: "1"
+              nvidia.com/rdma4: "1"
+              nvidia.com/rdma5: "1"
+              nvidia.com/rdma6: "1"
+              nvidia.com/rdma7: "1"
+          volumeMounts:
+            - name: everything
+              mountPath: /data
+            - name: shm
+              mountPath: /dev/shm
+      volumes:
+        - name: everything
+          hostPath:
+            path: /mnt/xstorage
+        - name: shm
+          hostPath:
+            path: /dev/shm
+
+---
+# Proxy
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm-proxy
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vllm-proxy
+  template:
+    metadata:
+      labels:
+        app: vllm-proxy
+      annotations:
+        sidecar.istio.io/inject: "false"
+    spec:
+      containers:
+        - name: proxy
+          image: registry-cn-shanghai.siflow.cn/hisys/pytorch:25.04-vllm
+          command: ["/usr/bin/env", "bash", "-c"]
+          args:
+            - |
+              python3 /data/vllm/toy_proxy_server.py \
+                --port 8192 \
+                --prefiller-port 8100 8101 \
+                --decoder-port 8200 8201 &
+              sleep inf
+          volumeMounts:
+            - name: everything
+              mountPath: /data
+            - name: shm
+              mountPath: /dev/shm
+      volumes:
+        - name: everything
+          hostPath:
+            path: /mnt/xstorage
+        - name: shm
+          hostPath:
+            path: /dev/shm

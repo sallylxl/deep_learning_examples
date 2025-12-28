@@ -1,0 +1,89 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sglang-server
+  namespace: t-hisys-xlliu
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sglang
+  template:
+    metadata:
+      labels:
+        app: sglang
+      annotations:
+        k8s.v1.cni.cncf.io/networks: kube-system/rdma0,kube-system/rdma1,kube-system/rdma2,kube-system/rdma3,kube-system/rdma4,kube-system/rdma5,kube-system/rdma6,kube-system/rdma7
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: unit
+                    operator: In
+                    values:
+                      - "2"
+      restartPolicy: Always
+      containers:
+        - name: sglang
+          image: registry-cn-shanghai.siflow.cn/hisys/sglang:latest
+          env:
+          - name: NCCL_IB_GID_INDEX
+            value: "5"
+          - name: NODE_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: spec.nodeName
+          command: ["python3"]
+          args:
+            - "-m"
+            - "sglang.launch_server"
+            - "--model"
+            - "/root/.cache/huggingface/deepseek-ai/DeepSeek-V3-0324"
+            - "--tp"
+            - "8"
+            - "--trust-remote-code"
+            - "--port"
+            - "30000"
+          ports:
+            - containerPort: 30000
+          resources:
+          resources:
+            limits:
+              nvidia.com/gpu: 8
+              nvidia.com/rdma0: "1"
+              nvidia.com/rdma1: "1"
+              nvidia.com/rdma2: "1"
+              nvidia.com/rdma3: "1"
+              nvidia.com/rdma4: "1"
+              nvidia.com/rdma5: "1"
+              nvidia.com/rdma6: "1"
+              nvidia.com/rdma7: "1"
+          volumeMounts:
+            - name: huggingface-cache
+              mountPath: /root/.cache/huggingface
+            - name: shm
+              mountPath: /dev/shm
+      volumes:
+        - name: huggingface-cache
+          hostPath:
+            path: /mnt/xstorage/model  
+        - name: shm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 32Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sglang-service
+  namespace: t-hisys-xlliu
+spec:
+  type: NodePort
+  selector:
+    app: sglang
+  ports:
+    - port: 30000         
+      targetPort: 30000   
+      nodePort: 30000   
